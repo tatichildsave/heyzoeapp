@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ai_usage/{uid} tracks each user's daily askZoe (AI proxy) call count.
+    // No rule matches it below, so it's denied to all client access by
+    // default — only the Cloud Function's Admin SDK (which bypasses these
+    // rules entirely) can read or write it.
+
+    match /users/{uid} {
+      // User can create and fully manage their own profile document.
+      allow create, delete: if request.auth != null && request.auth.uid == uid;
+
+      // Read access: owner and linked partners.
+      allow get, list: if request.auth != null && (
+        request.auth.uid == uid ||
+        resource.data.partnerId == request.auth.uid
+      );
+
+      // Update access:
+      // 1) owner can update any field on their document
+      // 2) linked partner can only set partner-linking fields to point back to themselves
+      allow update: if request.auth != null && (
+        request.auth.uid == uid ||
+        (
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['partnerId', 'mode', 'partnerName']) &&
+          request.resource.data.partnerId == request.auth.uid
+        )
+      );
+
+      // A goal the owner has explicitly marked "share with partner". Only
+      // the owner writes here; the owner and whoever their own profile
+      // currently names as partnerId can read it. Goals not marked shared
+      // never leave the owner's device in the first place — this
+      // subcollection is the only couple-visible surface.
+      match /sharedGoals/{goalId} {
+        allow read: if request.auth != null && (
+          request.auth.uid == uid ||
+          get(/databases/$(database)/documents/users/$(uid)).data.partnerId == request.auth.uid
+        );
+        allow write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Public expert directory — one profile per account, doc id == owner's
+    // uid. Readable by any signed-in user (including anonymous — this is a
+    // public listing, not private data) so the marketplace works day one;
+    // only the owner can create/edit their own listing.
+    match /experts/{expertId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == expertId;
+
+      // A booking is a lightweight receipt: whoever books writes their own
+      // record, only the expert who owns the listing can read the list —
+      // this is what lets the dashboard show a real (not mock) session
+      // count without exposing who booked to anyone else.
+      match /bookings/{bookingId} {
+        allow create: if request.auth != null && request.resource.data.bookedByUid == request.auth.uid;
+        allow read: if request.auth != null && request.auth.uid == expertId;
+      }
+    }
+  }
+}

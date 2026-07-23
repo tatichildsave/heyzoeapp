@@ -1,0 +1,58 @@
+:root {
+  --ds-bg-canvas: #f7f8fa;
+  --ds-bg-surface: #ffffff;
+  --ds-text-strong: #101828;
+  --ds-text-body: #344054;
+  --ds-text-muted: #667085;
+  --ds-border-subtle: #eaecf0;
+  --ds-brand-primary: #111827;
+}
+
+body {
+  background: var(--ds-bg-canvas);
+  color: var(--ds-text-body);
+  font-family: 'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="dialog"] button:focus-visible {
+  outline: 3px solid #175cd3;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes ds-skeleton {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
