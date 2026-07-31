@@ -1,7 +1,7 @@
 const { HttpsError } = require("firebase-functions/v2/https");
 const { FieldValue } = require("firebase-admin/firestore");
 const { db } = require("../lib/admin");
-const config = require("../../config/ai-usage.config.json");
+const config = require("../config/ai-usage.config.json");
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
