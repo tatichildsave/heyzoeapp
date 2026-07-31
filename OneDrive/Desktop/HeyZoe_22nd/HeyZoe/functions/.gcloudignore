@@ -1,0 +1,31 @@
+# .gcloudignore tells Firebase Cloud Build which files to ignore
+
+# Version control
+.git
+.gitignore
+.github
+
+# Dependencies (will be reinstalled in the cloud build)
+node_modules/
+npm-debug.log
+npm-shrinkwrap.json
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.mocharc.json
+jest.config.js
+coverage/
+
+# Documentation
+README.md
+CONTRIBUTING.md

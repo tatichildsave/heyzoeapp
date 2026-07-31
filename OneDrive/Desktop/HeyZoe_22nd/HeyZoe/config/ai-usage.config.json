@@ -1,0 +1,31 @@
+{
+  "_comment": "Single source of truth for AI usage limits, read identically by functions/ai/quota.js (Node require) and src/utils/aiUsageConfig.js (Vite JSON import — no build step needed for either). To introduce Free/Beta/Premium plans for real, set users/{uid}.plan in Firestore to one of the keys under 'plans' — no code changes required. Anyone without a plan field falls back to 'defaultPlan'.",
+
+  "defaultPlan": "beta",
+
+  "plans": {
+    "free": {
+      "dailyCallLimit": 10,
+      "monthlyCallLimit": 100,
+      "maxPromptChars": 4000,
+      "minSecondsBetweenCalls": 10
+    },
+    "beta": {
+      "dailyCallLimit": 30,
+      "monthlyCallLimit": 400,
+      "maxPromptChars": 4000,
+      "minSecondsBetweenCalls": 5
+    },
+    "premium": {
+      "dailyCallLimit": 100,
+      "monthlyCallLimit": 1500,
+      "maxPromptChars": 6000,
+      "minSecondsBetweenCalls": 3
+    }
+  },
+
+  "global": {
+    "_comment": "A project-wide daily ceiling across every user combined — the circuit breaker that protects against a cost spike from a bug, a viral moment, or coordinated abuse spread across many accounts that are each individually within their own limit. Raise this deliberately as real usage grows.",
+    "maxCallsPerDayAcrossAllUsers": 2000
+  }
+}
