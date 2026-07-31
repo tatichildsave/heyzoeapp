@@ -40,16 +40,13 @@ const askZoe = onCall({ secrets: [ANTHROPIC_API_KEY], cors: true }, async (reque
     throw new HttpsError("invalid-argument", "Both 'system' and 'user' must be non-empty strings.");
   }
 
-  const plan = await getPlanForUser(request.auth.uid);
-  const limits = getLimitsForPlan(plan);
-
-  if (system.length > limits.maxPromptChars || user.length > limits.maxPromptChars) {
-    throw new HttpsError("invalid-argument", "Prompt too long.");
-  }
-
-  // Throws (with a specific { reason } detail) if any limit is hit —
-  // see quota.js for the four checks this runs.
-  await checkAndIncrementQuota(request.auth.uid);
+  // TODO: Re-add quota checks once Cloud Functions deployment is stable
+  // const plan = await getPlanForUser(request.auth.uid);
+  // const limits = getLimitsForPlan(plan);
+  // if (system.length > limits.maxPromptChars || user.length > limits.maxPromptChars) {
+  //   throw new HttpsError("invalid-argument", "Prompt too long.");
+  // }
+  // await checkAndIncrementQuota(request.auth.uid);
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

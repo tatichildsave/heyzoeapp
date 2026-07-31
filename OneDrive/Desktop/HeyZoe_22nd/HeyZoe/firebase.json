@@ -19,7 +19,10 @@
     {
       "source": "functions",
       "codebase": "default",
-      "ignore": ["node_modules", ".git", "*.log"]
+      "ignore": ["node_modules", ".git", "*.log"],
+      "timeoutSeconds": 300,
+      "memory": "512MB",
+      "minInstances": 1
     }
   ]
 }
