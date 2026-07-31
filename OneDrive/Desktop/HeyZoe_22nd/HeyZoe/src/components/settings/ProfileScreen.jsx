@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Bell, ChevronRight, Compass, Download, Share, Snowflake, Sparkles, User, Users } from "lucide-react";
+import { Bell, ChevronRight, Compass, Download, MessageCircle, Share, Snowflake, Sparkles, User, Users } from "lucide-react";
 import { EmailAuthProvider, linkWithCredential, signInWithEmailAndPassword } from "firebase/auth";
 import { T } from "../../theme";
 import { BADGES_CATALOG, ACHIEVEMENT_CATALOG } from "../../constants";
@@ -25,7 +25,7 @@ import { trackEvent } from "../../services/analytics";
  */
 export function ProfileScreen({
   state, resetApp, coupleProfile, onOpenCouple, onOpenExperts, onOpenMyExpertProfile, hasExpertProfile, onOpenLifeReport,
-  remindersEnabled, reminderStatus, onEnableReminders, onDisableReminders,
+  remindersEnabled, reminderStatus, onEnableReminders, onDisableReminders, onOpenFeedback,
 }) {
   const { goals, xp, streak, streakFreezes, badges } = state;
   const metrics = useMemo(() => computeGameMetrics({ goals, streak, xp }), [goals, streak, xp]);
@@ -88,6 +88,21 @@ export function ProfileScreen({
   return (
     <div style={{ padding: "20px 20px 100px", overflowY: "auto", height: "100%" }}>
       <ScreenHeader title="You" subtitle={`${metrics.goalsCount} active goal${metrics.goalsCount === 1 ? "" : "s"} · ${streak}-day streak`} />
+
+      <Card
+        padding={14}
+        onClick={onOpenFeedback}
+        style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10, backgroundColor: T.ink, border: "none" }}
+      >
+        <div style={{ width: 34, height: 34, borderRadius: T.rFull, backgroundColor: "rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <MessageCircle size={16} color="#fff" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: T.font, fontSize: 13, fontWeight: 600, color: "#fff" }}>This is a beta — send feedback</div>
+          <div style={{ fontFamily: T.font, fontSize: 12, color: "rgba(255,255,255,0.65)", marginTop: 1 }}>Something broke or confused you? Tell me directly.</div>
+        </div>
+        <ChevronRight size={16} color="rgba(255,255,255,0.6)" />
+      </Card>
 
       <div
         style={{

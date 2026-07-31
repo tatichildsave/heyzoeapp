@@ -4,10 +4,10 @@
   "type": "commonjs",
   "main": "index.js",
   "engines": {
-    "node": "22"
+    "node": "20"
   },
   "dependencies": {
-    "firebase-admin": "^12.7.0",
-    "firebase-functions": "^5.1.1"
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.0.0"
   }
 }

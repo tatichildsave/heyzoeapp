@@ -3,7 +3,8 @@ import { Snowflake } from "lucide-react";
 import { T } from "../../theme";
 import { ConfettiBurst, ZoeAvatar } from "./Visuals";
 
-const DURATIONS = { levelup: 2600, badge: 2200, "freeze-used": 2400, "freeze-earned": 2200 };
+const DURATIONS = { levelup: 2600, "goal-complete": 2800, badge: 2200, "freeze-used": 2400, "freeze-earned": 2200 };
+const MODAL_TYPES = ["levelup", "goal-complete"];
 
 function toastContent(celebration) {
   if (celebration.type === "badge") {
@@ -49,8 +50,8 @@ export function Celebration({ celebration, onDone }) {
 
   if (!celebration) return null;
 
-  const isLevelUp = celebration.type === "levelup";
-  const toast = !isLevelUp ? toastContent(celebration) : null;
+  const isModal = MODAL_TYPES.includes(celebration.type);
+  const toast = !isModal ? toastContent(celebration) : null;
   const Icon = toast?.icon;
 
   return (
@@ -58,12 +59,12 @@ export function Celebration({ celebration, onDone }) {
       onClick={onDone}
       style={{
         position: "absolute", inset: 0, zIndex: 40, display: "flex", alignItems: "center", justifyContent: "center",
-        backgroundColor: isLevelUp ? "rgba(34,34,34,0.28)" : "transparent",
+        backgroundColor: isModal ? "rgba(34,34,34,0.28)" : "transparent",
         cursor: "pointer",
       }}
     >
-      <ConfettiBurst show count={isLevelUp ? 32 : 20} />
-      {isLevelUp ? (
+      <ConfettiBurst show count={isModal ? 32 : 20} />
+      {celebration.type === "levelup" ? (
         <div style={{
           animation: "modalPop .35s cubic-bezier(.2,.8,.3,1.2)",
           backgroundColor: T.canvas, borderRadius: T.rLg, padding: "28px 32px", textAlign: "center",
@@ -72,6 +73,16 @@ export function Celebration({ celebration, onDone }) {
           <ZoeAvatar size={56} mood="celebrate" glow />
           <div style={{ fontFamily: T.font, fontSize: 20, fontWeight: 700, color: T.ink, marginTop: 6 }}>Level {celebration.level}!</div>
           <div style={{ fontFamily: T.font, fontSize: 13, color: T.muted }}>Zoe's proud of you. Keep it going.</div>
+        </div>
+      ) : celebration.type === "goal-complete" ? (
+        <div style={{
+          animation: "modalPop .35s cubic-bezier(.2,.8,.3,1.2)",
+          backgroundColor: T.canvas, borderRadius: T.rLg, padding: "28px 32px", textAlign: "center", maxWidth: 280,
+          boxShadow: "0 12px 40px rgba(0,0,0,0.25)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+        }}>
+          <ZoeAvatar size={56} mood="celebrate" glow />
+          <div style={{ fontFamily: T.font, fontSize: 20, fontWeight: 700, color: T.ink, marginTop: 6 }}>Goal complete!</div>
+          <div style={{ fontFamily: T.font, fontSize: 13, color: T.muted }}>"{celebration.goalTitle}" — every milestone done. Well earned.</div>
         </div>
       ) : toast ? (
         <div style={{

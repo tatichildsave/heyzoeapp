@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppState, useCouple, useExperts, usePushReminders } from "./hooks";
 import { useViewport } from "./components/common/Visuals";
 import { AppFrame, BottomNav, Sidebar } from "./components/common/LayoutNav";
 import { Celebration } from "./components/common/Celebration";
+import { ReminderBanner } from "./components/common/ReminderBanner";
 import { SimpleOnboarding, GoalBuilderScreen } from "./components/onboarding";
 import { Home } from "./components/dashboard";
 import { GoalsScreen, GoalDetailScreen } from "./components/goals";
@@ -11,14 +12,19 @@ import { CoupleSetupScreen, UsScreen } from "./components/couple";
 import { ExpertsScreen, ExpertProfileScreen, BecomeExpertScreen, ExpertDashboardScreen } from "./components/experts";
 import { LifeReportScreen } from "./components/report";
 import { SprintReviewScreen } from "./components/planner";
+import { FeedbackScreen } from "./components/feedback";
 import { registerServiceWorker } from "./services/pwa";
 import { trackEvent, trackScreenView, setAnalyticsUser } from "./services/analytics";
+import { findMostUrgentMilestone, shouldShowReminder } from "./utils/milestones";
 
 // Gives every milestone a stable id — the AI/fallback goal generator
 // returns milestones without ids, but toggling progress needs one.
+// Also stamps createdAt, which anchors each milestone's relative
+// "weekDue" to an actual calendar date (see utils/milestones.js).
 function withMilestoneIds(goal) {
   return {
     ...goal,
+    createdAt: goal.createdAt || new Date().toISOString(),
     milestones: (goal.milestones || []).map((m, i) => ({ ...m, id: m.id || `${goal.id || goal.categoryId}-m${i}`, done: !!m.done })),
   };
 }
@@ -31,6 +37,7 @@ export default function App() {
     completeOnboarding,
     addGoal,
     toggleMilestone,
+    deleteGoal,
     checkedInToday,
     checkInToday,
     checkInHabit,
@@ -39,6 +46,7 @@ export default function App() {
     completeSprint,
     addXp,
     setReport,
+    markReminderShown,
     resetApp,
     celebration,
     clearCelebration,
@@ -63,11 +71,18 @@ export default function App() {
   const { device } = useViewport(frameRef);
   const [addingGoalFor, setAddingGoalFor] = useState(null); // categoryId while adding a goal from Goals tab
   const [newGoalShared, setNewGoalShared] = useState(false);
-  // "couple-setup" | "us" | "experts" | "expert-profile" | "become-expert" | "expert-dashboard" | "life-report" | "sprint-review" | null
+  // "couple-setup" | "us" | "experts" | "expert-profile" | "become-expert" | "expert-dashboard" | "life-report" | "sprint-review" | "feedback" | null
   const [secondaryView, setSecondaryView] = useState(null);
   const [expertCategoryFilter, setExpertCategoryFilter] = useState(null);
   const [selectedExpert, setSelectedExpert] = useState(null);
   const [viewingGoalId, setViewingGoalId] = useState(null);
+
+  // findMostUrgentMilestone stays the one place priority is decided (see
+  // utils/milestones.js); shouldShowReminder only decides whether to
+  // surface that same result again right now (day+milestone-aware, not a
+  // fixed time gap).
+  const urgentMilestone = useMemo(() => findMostUrgentMilestone(state.goals), [state.goals]);
+  const showReminderBanner = state.onboardingDone && !addingGoalFor && !secondaryView && !viewingGoalId && shouldShowReminder(urgentMilestone, state.inAppReminder);
 
   const currentView = !loaded
     ? null // nothing to log yet — still loading local state
@@ -226,6 +241,14 @@ export default function App() {
     );
   }
 
+  if (secondaryView === "feedback") {
+    return (
+      <AppFrame device={device} frameRef={frameRef}>
+        <FeedbackScreen uid={couple.uid} onBack={() => setSecondaryView(null)} />
+      </AppFrame>
+    );
+  }
+
   const viewingGoal = viewingGoalId ? state.goals.find((g) => g.id === viewingGoalId) : null;
   if (viewingGoal) {
     return (
@@ -236,6 +259,10 @@ export default function App() {
           toggleMilestone={(milestoneId) => toggleMilestone(viewingGoal.id, milestoneId)}
           checkInHabit={(habitId) => checkInHabit(viewingGoal.id, habitId)}
           addNote={(text) => addGoalNote(viewingGoal.id, text)}
+          onDelete={() => {
+            deleteGoal(viewingGoal.id);
+            setViewingGoalId(null);
+          }}
         />
       </AppFrame>
     );
@@ -257,6 +284,7 @@ export default function App() {
         onOpenMyExpertProfile={() => setSecondaryView(experts.myProfile ? "expert-dashboard" : "become-expert")}
         hasExpertProfile={!!experts.myProfile}
         onOpenLifeReport={() => setSecondaryView("life-report")}
+        onOpenFeedback={() => setSecondaryView("feedback")}
         remindersEnabled={reminders.enabled}
         reminderStatus={reminders.status}
         onEnableReminders={reminders.enable}
@@ -285,6 +313,16 @@ export default function App() {
         <div style={{ flex: 1, position: "relative", height: "100%" }}>
           {content}
           {!isDesktop && <BottomNav tab={state.tab} setTab={setTab} />}
+          {showReminderBanner && (
+            <ReminderBanner
+              urgent={urgentMilestone}
+              onOpen={() => {
+                markReminderShown(urgentMilestone.id);
+                setViewingGoalId(urgentMilestone.goalId);
+              }}
+              onDismiss={() => markReminderShown(urgentMilestone.id)}
+            />
+          )}
           <Celebration celebration={celebration} onDone={clearCelebration} />
         </div>
       </div>

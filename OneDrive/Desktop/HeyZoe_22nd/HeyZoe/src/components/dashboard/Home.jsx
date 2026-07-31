@@ -5,6 +5,7 @@ import { catColor } from "../../constants";
 import { Btn, Card } from "../common/Primitives";
 import { CatBadge, ProgressRing, ZoeAvatar } from "../common/Visuals";
 import { computeGameMetrics } from "../../utils/gamification";
+import { findMostUrgentMilestone, describeUrgentMilestone } from "../../utils/milestones";
 
 function greeting(name) {
   const h = new Date().getHours();
@@ -12,22 +13,28 @@ function greeting(name) {
   return name ? `${base}, ${name}` : base;
 }
 
+// Picks the single most time-relevant thing to prompt about, instead of
+// just whichever incomplete milestone happens to sit first in the array —
+// an overdue milestone from three weeks ago now surfaces here instead of
+// staying silently buried behind whatever's due in month four.
+// Formatting itself lives in utils/milestones.js (describeUrgentMilestone)
+// so this card and the app-wide reminder banner never say different
+// things about the same milestone.
 function buildNudge({ goals, streak, checkedInToday }) {
   if (goals.length === 0) {
     return { primary: "Set your first goal to get moving.", secondary: "Head to Goals to start." };
   }
-  const nextGoal = goals.find((g) => (g.milestones || []).some((m) => !m.done)) || goals[0];
-  const nextMilestone = (nextGoal.milestones || []).find((m) => !m.done);
-  if (!checkedInToday) {
+
+  const urgent = findMostUrgentMilestone(goals);
+
+  if (checkedInToday) {
     return {
-      primary: nextMilestone ? nextMilestone.title : "Check in to keep your streak alive.",
-      secondary: `Part of "${nextGoal.title}"`,
+      primary: `Nice — day ${streak} done.`,
+      secondary: urgent ? `Next up: ${urgent.title}` : "All milestones complete on this goal.",
     };
   }
-  return {
-    primary: `Nice — day ${streak} done.`,
-    secondary: nextMilestone ? `Next up: ${nextMilestone.title}` : "All milestones complete on this goal.",
-  };
+
+  return describeUrgentMilestone(urgent, { checkedInToday });
 }
 
 // Small checkbox row used for sprint milestones. Pops on completion via a
@@ -114,9 +121,12 @@ export function Home({ state, checkedInToday, checkInToday, startNewSprint, togg
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <Flame size={16} color={T.gold} />
           <span style={{ fontFamily: T.font, fontSize: 12, fontWeight: 700, color: "#7a5424", textTransform: "uppercase", letterSpacing: 0.5 }}>Today</span>
+          {nudge.urgency === "overdue" && (
+            <span style={{ fontFamily: T.font, fontSize: 10, fontWeight: 700, color: "#fff", backgroundColor: "#b0463a", borderRadius: T.rFull, padding: "2px 8px", textTransform: "uppercase", letterSpacing: 0.3 }}>Overdue</span>
+          )}
         </div>
         <div style={{ fontFamily: T.font, fontSize: 20, fontWeight: 700, color: T.ink, marginBottom: 4, letterSpacing: -0.3, lineHeight: 1.25 }}>{nudge.primary}</div>
-        <div style={{ fontFamily: T.font, fontSize: 13, color: T.muted, marginBottom: 16 }}>{nudge.secondary}</div>
+        <div style={{ fontFamily: T.font, fontSize: 13, color: nudge.urgency === "overdue" ? "#b0463a" : T.muted, marginBottom: 16 }}>{nudge.secondary}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
           <Btn size="sm" disabled={checkedInToday || goals.length === 0} onClick={handleCheckIn}>
             {checkedInToday ? "Checked in ✓" : "Check in"}

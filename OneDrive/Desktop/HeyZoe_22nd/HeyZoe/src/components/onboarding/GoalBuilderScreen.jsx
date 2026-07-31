@@ -3,21 +3,45 @@ import { Circle, Send, UserPlus, Zap, Check } from "lucide-react";
 import { T } from "../../theme";
 import { catById } from "../../constants";
 import { Btn, Card, ScreenHeader } from "../common/Primitives";
-import { CatBadge, LoadingDots, ZoeAvatar } from "../common/Visuals";
-import { zoeGenerateGoal } from "../../services/ai";
+import { CatBadge, LoadingDots, Pill, ZoeAvatar } from "../common/Visuals";
+import { zoeGenerateGoal, QuotaError } from "../../services/ai";
 
-export function GoalBuilderScreen({ categoryId, horizon, onDone, onBack, mode, shared, setShared, onFindExpert }) {
+const DURATION_PRESETS = [
+  { months: 1, label: "1 month" },
+  { months: 3, label: "3 months" },
+  { months: 6, label: "6 months" },
+  { months: 12, label: "1 year" },
+  { months: 24, label: "2 years" },
+];
+
+// Onboarding's first goal skips this (see SimpleOnboarding — one less
+// decision before a first-time user's first win); it only shows up once
+// someone's adding a second goal from the Goals tab, where a bit more
+// setup is earned rather than friction.
+export function GoalBuilderScreen({ categoryId, horizon, onDone, onBack, mode, shared, setShared, onFindExpert, showDurationPicker = true }) {
   const cat = catById(categoryId);
   const [aspiration, setAspiration] = useState("");
+  const [horizonMonths, setHorizonMonths] = useState(horizon);
   const [stage, setStage] = useState("input");
   const [goal, setGoal] = useState(null);
+  const [quotaMessage, setQuotaMessage] = useState(null);
 
   const handleGenerate = async () => {
     if (!aspiration.trim()) return;
     setStage("loading");
-    const result = await zoeGenerateGoal(cat.label, aspiration.trim(), horizon);
-    setGoal(result);
-    setStage("result");
+    setQuotaMessage(null);
+    try {
+      const result = await zoeGenerateGoal(cat.label, aspiration.trim(), horizonMonths);
+      setGoal(result);
+      setStage("result");
+    } catch (e) {
+      if (e instanceof QuotaError) {
+        setQuotaMessage(e.message);
+        setStage("input");
+      } else {
+        throw e;
+      }
+    }
   };
 
   return (
@@ -29,9 +53,20 @@ export function GoalBuilderScreen({ categoryId, horizon, onDone, onBack, mode, s
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <ZoeAvatar size={32} mood="idle" />
             <div style={{ backgroundColor: T.surfaceSoft, borderRadius: "4px 14px 14px 14px", padding: "12px 14px", fontFamily: T.font, fontSize: 14, color: T.ink, lineHeight: 1.5 }}>
-              What's your {cat.label.toLowerCase()} aspiration for the next {horizon} months? Don't worry about making it perfect — I'll help shape it.
+              What's your {cat.label.toLowerCase()} aspiration for the next {horizonMonths} month{horizonMonths === 1 ? "" : "s"}? Don't worry about making it perfect — I'll help shape it.
             </div>
           </div>
+
+          {showDurationPicker && (
+            <div>
+              <div style={{ fontFamily: T.font, fontSize: 12, fontWeight: 700, color: T.mutedSoft, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 8 }}>Timeframe</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {DURATION_PRESETS.map((p) => (
+                  <Pill key={p.months} label={p.label} selected={horizonMonths === p.months} onClick={() => setHorizonMonths(p.months)} />
+                ))}
+              </div>
+            </div>
+          )}
 
           <textarea
             value={aspiration}
@@ -48,6 +83,10 @@ export function GoalBuilderScreen({ categoryId, horizon, onDone, onBack, mode, s
               <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} style={{ width: 16, height: 16 }} />
               Share this goal on our joint dashboard
             </label>
+          )}
+
+          {quotaMessage && (
+            <div style={{ fontFamily: T.font, fontSize: 12, color: "#b0463a", backgroundColor: "#fbeceb", borderRadius: T.rSm, padding: "8px 12px" }}>{quotaMessage}</div>
           )}
 
           {stage === "loading" ? (

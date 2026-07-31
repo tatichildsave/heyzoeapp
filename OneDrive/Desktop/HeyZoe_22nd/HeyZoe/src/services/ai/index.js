@@ -1,6 +1,22 @@
 import { httpsCallable } from "firebase/functions";
 import { functions, isFirebaseConfigured } from "../firebase";
 
+/**
+ * Thrown specifically when askZoe blocks a request due to a usage limit
+ * (see functions/ai/quota.js — reason is "global" | "rate" | "daily" |
+ * "monthly"). Callers (zoeGenerateGoal etc.) let this propagate instead
+ * of silently falling back to canned content, because a deliberate limit
+ * is a different situation than a real outage — the person deserves to
+ * know why Zoe suddenly stopped, not get quietly downgraded content.
+ */
+export class QuotaError extends Error {
+  constructor(reason, message) {
+    super(message);
+    this.name = "QuotaError";
+    this.reason = reason; // "global" | "rate" | "daily" | "monthly"
+  }
+}
+
 async function askClaude(system, user) {
   if (!isFirebaseConfigured) {
     // No Firebase project wired up yet — skip straight to the fallback
@@ -8,9 +24,17 @@ async function askClaude(system, user) {
     throw new Error("Firebase not configured");
   }
   const askZoe = httpsCallable(functions, "askZoe");
-  const { data } = await askZoe({ system, user });
-  const clean = (data.text || "").replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  try {
+    const { data } = await askZoe({ system, user });
+    const clean = (data.text || "").replace(/```json|```/g, "").trim();
+    return JSON.parse(clean);
+  } catch (error) {
+    if (error?.code === "functions/resource-exhausted") {
+      const reason = error.details?.reason || "daily";
+      throw new QuotaError(reason, error.message);
+    }
+    throw error;
+  }
 }
 
 function fallbackGoal(categoryLabel, aspiration, horizon) {
@@ -38,7 +62,8 @@ export async function zoeGenerateGoal(categoryLabel, aspiration, horizon) {
     const result = await askClaude(system, user);
     if (!result.title || !result.milestones) throw new Error("bad shape");
     return result;
-  } catch {
+  } catch (e) {
+    if (e instanceof QuotaError) throw e;
     return fallbackGoal(categoryLabel, aspiration, horizon);
   }
 }
@@ -48,7 +73,8 @@ export async function zoeSprintReview(goalsSummary, answers) {
   const user = `Active goals context: ${goalsSummary}\n\nReflection answers:\n1. What did you accomplish? ${answers.accomplished}\n2. What blocked you? ${answers.blocked}\n3. What should you stop doing? ${answers.stop}\n4. What should you start doing? ${answers.start}\n5. Should any goals be adjusted? ${answers.adjust}`;
   try {
     return await askClaude(system, user);
-  } catch {
+  } catch (e) {
+    if (e instanceof QuotaError) throw e;
     return {
       summary: "You made real progress this sprint and stayed engaged with your plan.",
       insight: "Consistency dipped mid-sprint - that's the most common place momentum slips.",
@@ -63,7 +89,8 @@ export async function zoeLifeReport(goalsSummary, sprintsCompleted, xp) {
   const user = `Goals and progress: ${goalsSummary}\nSprints completed: ${sprintsCompleted}\nTotal XP earned: ${xp}\n\nGenerate the Life Report.`;
   try {
     return await askClaude(system, user);
-  } catch {
+  } catch (e) {
+    if (e instanceof QuotaError) throw e;
     return {
       headline: "A period of real, measurable growth.",
       achievements: ["Set and worked consistently toward multiple SMART goals", "Completed several Life Sprints", "Built new supporting habits"],

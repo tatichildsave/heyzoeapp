@@ -1,10 +1,8 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
-const { checkAndIncrementQuota } = require("./quota");
+const { checkAndIncrementQuota, getPlanForUser, getLimitsForPlan } = require("./quota");
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
-
-const MAX_PROMPT_CHARS = 4000; // keeps a single request bounded — Zoe's prompts are short by design
 
 /**
  * askZoe — callable Cloud Function that stands in front of the Anthropic API.
@@ -16,9 +14,11 @@ const MAX_PROMPT_CHARS = 4000; // keeps a single request bounded — Zoe's promp
  * comes back.
  *
  * Every caller must be authenticated (anonymous auth included — see
- * src/hooks/useAuth.js) and is capped at DAILY_CALL_LIMIT requests/day
- * (see quota.js), so a leaked function URL can't be used to run up the
- * API bill.
+ * src/hooks/useAuth.js). Usage limits (prompt length, per-user daily/
+ * monthly caps, burst-rate spacing, and a project-wide circuit breaker)
+ * all come from the single config/ai-usage.config.json — see quota.js —
+ * so a leaked function URL can't be used to run up the API bill, and
+ * raising or lowering any limit later is a config edit, not a code change.
  *
  * Deploy:
  *   firebase functions:secrets:set ANTHROPIC_API_KEY
@@ -39,10 +39,16 @@ const askZoe = onCall({ secrets: [ANTHROPIC_API_KEY], cors: true }, async (reque
   if (typeof system !== "string" || typeof user !== "string" || !system.trim() || !user.trim()) {
     throw new HttpsError("invalid-argument", "Both 'system' and 'user' must be non-empty strings.");
   }
-  if (system.length > MAX_PROMPT_CHARS || user.length > MAX_PROMPT_CHARS) {
+
+  const plan = await getPlanForUser(request.auth.uid);
+  const limits = getLimitsForPlan(plan);
+
+  if (system.length > limits.maxPromptChars || user.length > limits.maxPromptChars) {
     throw new HttpsError("invalid-argument", "Prompt too long.");
   }
 
+  // Throws (with a specific { reason } detail) if any limit is hit —
+  // see quota.js for the four checks this runs.
   await checkAndIncrementQuota(request.auth.uid);
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {

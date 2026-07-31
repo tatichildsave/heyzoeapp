@@ -58,5 +58,12 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == expertId;
       }
     }
+    // A write-only mailbox: anyone signed in (including anonymous) can
+    // submit feedback tagged with their own uid, but nobody — not even
+    // the person who wrote it — can read it back through the client.
+    // Reviewed only via Firebase Console or the Admin SDK.
+    match /feedback/{feedbackId} {
+      allow create: if request.auth != null && request.resource.data.submittedBy == request.auth.uid;
+    }
   }
 }

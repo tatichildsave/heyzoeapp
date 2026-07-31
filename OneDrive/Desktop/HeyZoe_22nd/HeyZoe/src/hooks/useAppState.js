@@ -18,6 +18,14 @@ function withHabitIds(goal) {
   };
 }
 
+// Goals saved before milestone due-dates existed have no createdAt to
+// anchor "week 12" to an actual date. Backfilling it to "now" (rather
+// than guessing a past date) means nothing suddenly looks overdue the
+// moment this ships — the milestone clock just starts today for them.
+function withCreatedAt(goal) {
+  return { ...goal, createdAt: goal.createdAt || new Date().toISOString() };
+}
+
 const STORAGE_KEY = "heyzoe:v2:state";
 
 const MAX_STREAK_FREEZES = 3;
@@ -37,6 +45,7 @@ const DEFAULT_STATE = {
   sprint: null,
   sprintsCompleted: 0,
   report: null,
+  inAppReminder: { milestoneId: null, shownOn: null },
 };
 
 /**
@@ -59,7 +68,7 @@ export function useAppState() {
         const res = await window.storage.get(STORAGE_KEY);
         if (res && res.value) {
           const loadedState = { ...DEFAULT_STATE, ...JSON.parse(res.value) };
-          loadedState.goals = loadedState.goals.map(withHabitIds);
+          loadedState.goals = loadedState.goals.map((g) => withCreatedAt(withHabitIds(g)));
           setState(loadedState);
         }
       } catch (e) {
@@ -113,33 +122,57 @@ export function useAppState() {
 
   // Called once, at the end of the simplified onboarding flow.
   const completeOnboarding = (firstGoal, name) => {
-    let next = { ...state, onboardingDone: true, tab: "home", name: name || "", goals: [withHabitIds(firstGoal)] };
+    let next = { ...state, onboardingDone: true, tab: "home", name: name || "", goals: [withCreatedAt(withHabitIds(firstGoal))] };
     next = awardBadge(next, "first-goal");
     commit(next);
   };
 
   const addGoal = (goal) => {
-    let next = { ...state, goals: [...state.goals, withHabitIds(goal)] };
+    let next = { ...state, goals: [...state.goals, withCreatedAt(withHabitIds(goal))] };
     if (next.goals.length >= 5) next = awardBadge(next, "goal-builder");
     commit(next);
   };
 
   // Awards XP the moment a milestone is marked done (and removes it if
   // un-checked, so toggling back and forth can't be used to farm XP).
+  // Also detects the goal itself just hit 100% for the first time — that's
+  // a bigger moment than any single milestone, so it gets its own
+  // celebration rather than just the usual badge/level-up check.
   const toggleMilestone = (goalId, milestoneId) => {
     const goal = state.goals.find((g) => g.id === goalId);
     const milestone = goal?.milestones.find((m) => m.id === milestoneId);
     if (!goal || !milestone) return;
     const nowDone = !milestone.done;
+    const wasComplete = goal.milestones.every((m) => m.done);
     const nextGoals = state.goals.map((g) =>
       g.id !== goalId ? g : { ...g, milestones: g.milestones.map((m) => (m.id === milestoneId ? { ...m, done: nowDone } : m)) }
     );
+    const isNowComplete = nextGoals.find((g) => g.id === goalId).milestones.every((m) => m.done);
     let next = { ...state, goals: nextGoals, xp: state.xp + (nowDone ? 30 : -30) };
+    let fallbackCelebration = null;
     if (nowDone) {
       const doneCount = nextGoals.flatMap((g) => g.milestones).filter((m) => m.done).length;
       if (doneCount >= 5) next = awardBadge(next, "milestone-5");
       trackEvent("milestone_completed", { goal_id: goalId, category_id: goal.categoryId });
+      if (isNowComplete && !wasComplete) {
+        next = { ...next, xp: next.xp + 50 };
+        fallbackCelebration = { type: "goal-complete", goalTitle: goal.title };
+        trackEvent("goal_completed", { goal_id: goalId, category_id: goal.categoryId });
+      }
     }
+    commit(next, fallbackCelebration);
+  };
+
+  const deleteGoal = (goalId) => {
+    const goal = state.goals.find((g) => g.id === goalId);
+    if (!goal) return; // Safety: goal doesn't exist
+    
+    const isComplete = goal.milestones?.every((m) => m.done);
+    trackEvent("goal_deleted", { goal_id: goalId, category_id: goal?.categoryId, was_complete: !!isComplete });
+    
+    // Consistency: use commit() like other state-modifying functions
+    // This ensures proper state batching and prevents race conditions
+    const next = { ...state, goals: state.goals.filter((g) => g.id !== goalId) };
     commit(next);
   };
 
@@ -234,6 +267,14 @@ export function useAppState() {
 
   const setReport = (report) => setState((s) => ({ ...s, report }));
 
+  // Records that the in-app reminder banner was shown/dismissed for this
+  // milestone today — see shouldShowReminder() in utils/milestones.js for
+  // how this is read. Plain bookkeeping, not a celebration, so it goes
+  // straight through setState rather than commit().
+  const markReminderShown = (milestoneId) => {
+    setState((s) => ({ ...s, inAppReminder: { milestoneId, shownOn: new Date().toISOString().slice(0, 10) } }));
+  };
+
   const resetApp = () => {
     window.storage.delete(STORAGE_KEY).catch(() => {});
     setState(DEFAULT_STATE);
@@ -246,6 +287,7 @@ export function useAppState() {
     completeOnboarding,
     addGoal,
     toggleMilestone,
+    deleteGoal,
     checkedInToday,
     checkInToday,
     checkInHabit,
@@ -254,6 +296,7 @@ export function useAppState() {
     completeSprint,
     addXp,
     setReport,
+    markReminderShown,
     resetApp,
     celebration,
     clearCelebration,

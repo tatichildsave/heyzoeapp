@@ -41,6 +41,7 @@ export function SimpleOnboarding({ onComplete }) {
       setShared={() => {}}
       onBack={() => setStage("focus")}
       onFindExpert={() => {}}
+      showDurationPicker={false}
       onDone={(goal) => onComplete(goal, name.trim())}
     />
   );

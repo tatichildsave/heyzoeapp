@@ -3,7 +3,7 @@ import { Calendar, CheckCircle2, Circle, RefreshCw, Target, Zap, ChevronRight } 
 import { T } from "../../theme";
 import { Btn, Card, ScreenHeader } from "../common/Primitives";
 import { CategoryIcon, LoadingDots, ZoeAvatar } from "../common/Visuals";
-import { zoeSprintReview } from "../../services/ai";
+import { zoeSprintReview, QuotaError } from "../../services/ai";
 
 export function SprintScreen({ state, checkInToday, toggleMilestone, startSprintReview, startNewSprint, checkedInToday }) {
   const { sprint, goals } = state;
@@ -86,6 +86,7 @@ export function SprintReviewScreen({ goals, onBack, onComplete }) {
   const [answers, setAnswers] = useState({ accomplished: "", blocked: "", stop: "", start: "", adjust: "" });
   const [stage, setStage] = useState("form");
   const [result, setResult] = useState(null);
+  const [quotaMessage, setQuotaMessage] = useState(null);
 
   const questions = [
     { key: "accomplished", q: "What did you accomplish?" },
@@ -98,10 +99,20 @@ export function SprintReviewScreen({ goals, onBack, onComplete }) {
 
   const submit = async () => {
     setStage("loading");
+    setQuotaMessage(null);
     const summary = goals.map((g) => `${g.title} (${g.milestones.filter((m) => m.done).length}/${g.milestones.length} milestones done)`).join("; ");
-    const r = await zoeSprintReview(summary, answers);
-    setResult(r);
-    setStage("result");
+    try {
+      const r = await zoeSprintReview(summary, answers);
+      setResult(r);
+      setStage("result");
+    } catch (e) {
+      if (e instanceof QuotaError) {
+        setQuotaMessage(e.message);
+        setStage("form");
+      } else {
+        throw e;
+      }
+    }
   };
 
   return (
@@ -122,6 +133,9 @@ export function SprintReviewScreen({ goals, onBack, onComplete }) {
               />
             </div>
           ))}
+          {quotaMessage && (
+            <div style={{ fontFamily: T.font, fontSize: 12, color: "#b0463a", backgroundColor: "#fbeceb", borderRadius: T.rSm, padding: "8px 12px" }}>{quotaMessage}</div>
+          )}
           <Btn full disabled={!allFilled} onClick={submit}>Get Zoe's synthesis</Btn>
         </div>
       )}

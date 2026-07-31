@@ -1,4 +1,5 @@
 import React from "react";
+import { trackEvent } from "./services/analytics";
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -12,6 +13,14 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error("Unhandled app error:", error, info);
+    // Without this, a crash is only ever visible in the specific tester's
+    // own browser console — which the developer will never see. GA4's
+    // conventional "exception" event name/shape, so it shows up in the
+    // standard Firebase/GA4 crash reporting views instead of a made-up one.
+    trackEvent("exception", {
+      description: `${error?.message || "Unknown error"} | ${info?.componentStack || ""}`.slice(0, 150),
+      fatal: true,
+    });
   }
 
   render() {
