@@ -4,7 +4,7 @@ import { T } from "../../theme";
 import { catById } from "../../constants";
 import { Btn, Card, ScreenHeader } from "../common/Primitives";
 import { CatBadge, LoadingDots, Pill, ZoeAvatar } from "../common/Visuals";
-import { zoeGenerateGoal, QuotaError } from "../../services/ai";
+import { zoeGenerateGoal, zoeGenerateClarifyingQuestions, QuotaError } from "../../services/ai";
 
 const DURATION_PRESETS = [
   { months: 1, label: "1 month" },
@@ -24,32 +24,88 @@ export function GoalBuilderScreen({ categoryId, horizon, onDone, onBack, mode, s
   const [horizonMonths, setHorizonMonths] = useState(horizon);
   const [stage, setStage] = useState("input");
   const [goal, setGoal] = useState(null);
+  const [clarifyingQuestions, setClarifyingQuestions] = useState([]);
+  const [clarifyingAnswers, setClarifyingAnswers] = useState({});
   const [quotaMessage, setQuotaMessage] = useState(null);
 
   const handleGenerate = async () => {
     if (!aspiration.trim()) return;
+    setQuotaMessage(null);
+    try {
+      const questionsResult = await zoeGenerateClarifyingQuestions(
+        cat.label,
+        aspiration.trim(),
+        horizonMonths
+      );
+      setClarifyingQuestions(questionsResult.questions || []);
+      setClarifyingAnswers({});
+      setStage("questions");
+    } catch (e) {
+      // If clarifying questions fail (quota hit or network error),
+      // skip the questions stage and go straight to goal generation.
+      // Don't block goal creation on a failed clarifying-questions call.
+      if (e instanceof QuotaError) {
+        setQuotaMessage(e.message);
+        setStage("input");
+      } else {
+        // Network or shape error: silently skip to loading with empty answers
+        handleGenerateGoal([]);
+      }
+    }
+  };
+
+  const handleGenerateGoal = async (answers) => {
     setStage("loading");
     setQuotaMessage(null);
     try {
-      const result = await zoeGenerateGoal(cat.label, aspiration.trim(), horizonMonths);
+      const result = await zoeGenerateGoal(
+        cat.label,
+        aspiration.trim(),
+        horizonMonths,
+        answers
+      );
       setGoal(result);
       setStage("result");
     } catch (e) {
       if (e instanceof QuotaError) {
         setQuotaMessage(e.message);
-        setStage("input");
+        setStage("questions");
       } else {
         throw e;
       }
     }
   };
 
+  const handleSkipQuestions = () => {
+    handleGenerateGoal([]);
+  };
+
+  const handleContinueWithAnswers = () => {
+    const answers = clarifyingQuestions.map((q) => ({
+      question: q,
+      answer: clarifyingAnswers[q] || "",
+    }));
+    handleGenerateGoal(answers);
+  };
+
   return (
     <div style={{ padding: "0 20px", height: "100%", display: "flex", flexDirection: "column" }}>
-      <ScreenHeader title={`${cat.label} goal`} subtitle={stage === "result" ? "Zoe turned this into a SMART goal" : "Tell Zoe your aspiration, in your own words"} onBack={onBack} />
+    <ScreenHeader
+      title={`${cat.label} goal`}
+      subtitle={
+        stage === "result"
+          ? "Zoe turned this into a SMART goal"
+          : stage === "questions"
+          ? "Help Zoe understand your goal better"
+          : "Tell Zoe your aspiration, in your own words"
+      }
+      onBack={stage === "questions" ? () => setStage("input") : onBack}
+    />
 
       {stage !== "result" && (
         <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+        {stage === "input" && (
+          <>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <ZoeAvatar size={32} mood="idle" />
             <div style={{ backgroundColor: T.surfaceSoft, borderRadius: "4px 14px 14px 14px", padding: "12px 14px", fontFamily: T.font, fontSize: 14, color: T.ink, lineHeight: 1.5 }}>
@@ -94,6 +150,70 @@ export function GoalBuilderScreen({ categoryId, horizon, onDone, onBack, mode, s
           ) : (
             <Btn full icon={Send} disabled={!aspiration.trim()} onClick={handleGenerate}>Ask Zoe</Btn>
           )}
+          </>
+        )}
+
+        {stage === "questions" && (
+          <>
+          <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 14 }}>
+            {clarifyingQuestions.map((q, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <ZoeAvatar size={32} mood="idle" />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ backgroundColor: T.surfaceSoft, borderRadius: "4px 14px 14px 14px", padding: "12px 14px", fontFamily: T.font, fontSize: 14, color: T.ink, lineHeight: 1.5 }}>
+                    {q}
+                  </div>
+                  <input
+                    type="text"
+                    value={clarifyingAnswers[q] || ""}
+                    onChange={(e) => setClarifyingAnswers({ ...clarifyingAnswers, [q]: e.target.value })}
+                    placeholder="Your answer..."
+                    style={{
+                      borderRadius: T.rSm,
+                      border: `1px solid ${T.hairline}`,
+                      padding: "10px 12px",
+                      fontFamily: T.font,
+                      fontSize: 14,
+                      color: T.ink,
+                      boxSizing: "border-box",
+                      outline: "none",
+                    }}
+                    onFocus={(e) => (e.target.style.border = `2px solid ${T.ink}`)}
+                    onBlur={(e) => (e.target.style.border = `1px solid ${T.hairline}`)}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {quotaMessage && (
+            <div style={{ fontFamily: T.font, fontSize: 12, color: "#b0463a", backgroundColor: "#fbeceb", borderRadius: T.rSm, padding: "8px 12px" }}>
+              {quotaMessage}
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+            <Btn full icon={Send} onClick={handleContinueWithAnswers}>
+              Continue
+            </Btn>
+            <button
+              onClick={handleSkipQuestions}
+              style={{
+                fontFamily: T.font,
+                fontSize: 13,
+                color: T.muted,
+                backgroundColor: "transparent",
+                border: "none",
+                cursor: "pointer",
+                textDecoration: "underline",
+                padding: "8px 0",
+              }}
+            >
+              Skip, just generate it
+            </button>
+          </div>
+          </>
+        )}
         </div>
       )}
 

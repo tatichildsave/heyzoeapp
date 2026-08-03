@@ -11,8 +11,8 @@
       "minSecondsBetweenCalls": 10
     },
     "beta": {
-      "dailyCallLimit": 30,
-      "monthlyCallLimit": 400,
+      "dailyCallLimit": 40,
+      "monthlyCallLimit": 500,
       "maxPromptChars": 4000,
       "minSecondsBetweenCalls": 5
     },

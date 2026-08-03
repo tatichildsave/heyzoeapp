@@ -55,7 +55,65 @@ function fallbackGoal(categoryLabel, aspiration, horizon) {
   };
 }
 
-export async function zoeGenerateGoal(categoryLabel, aspiration, horizon) {
+function fallbackQuestions(categoryLabel) {
+  // Generic but sensible 2-3 follow-ups per category, used when:
+  // - Firebase isn't configured, OR
+  // - askClaude fails, OR
+  // - response shape doesn't match expected {questions: [...]}.
+  const categoryQuestionsMap = {
+    "fitness": [
+      "What type of exercise do you enjoy most?",
+      "How many days per week can you realistically commit?"
+    ],
+    "career": [
+      "What specific role or skill are you targeting?",
+      "Are there any skill gaps you need to fill first?",
+      "What's your realistic timeline for a change or move?"
+    ],
+    "finance": [
+      "Do you have an emergency fund started?",
+      "What's your biggest financial challenge right now?"
+    ],
+    "health": [
+      "Any existing health issues or medications to consider?",
+      "What does a typical day look like for your health habits?"
+    ],
+    "relationships": [
+      "Is this goal about a specific relationship or general connection?",
+      "What's one thing you'd like to improve or change?"
+    ],
+    "learning": [
+      "Do you have any experience with this skill already?",
+      "How much time per week can you dedicate to learning?"
+    ],
+    "growth": [
+      "What area of growth matters most to you?",
+      "What does success look like in 3 months?"
+    ],
+  };
+  const questions = categoryQuestionsMap[categoryLabel.toLowerCase()] || [
+    "What specific outcome would feel like a win?",
+    "What's your biggest challenge with this goal?",
+  ];
+  return { questions };
+}
+
+export async function zoeGenerateClarifyingQuestions(categoryLabel, aspiration, horizon) {
+  const system = `You are Zoe, the AI planning coach inside "Hey Zoe". The user just told you their aspiration. Your job is to ask 2-4 short, specific clarifying questions tailored to their life category (${categoryLabel}) and their exact words. Make questions concrete and actionable — avoid generic follow-ups. Respond ONLY with raw JSON (no markdown fences, no prose) matching exactly this shape:\n{"questions": [string, string, ...]} (2-4 questions)`;
+  const user = `Life category: ${categoryLabel}\nUser's aspiration in their own words: "${aspiration}"\nPlanning horizon: ${horizon} months\n\nAsk 2-4 specific clarifying questions about this goal.`;
+  try {
+    const result = await askClaude(system, user);
+    if (!result.questions || !Array.isArray(result.questions) || result.questions.length === 0) {
+      throw new Error("bad shape");
+    }
+    return result;
+  } catch (e) {
+    if (e instanceof QuotaError) throw e;
+    return fallbackQuestions(categoryLabel);
+  }
+}
+
+export async function zoeGenerateGoal(categoryLabel, aspiration, horizon, clarifyingAnswers = []) {
   const system = `You are Zoe, the AI planning coach inside "Hey Zoe" - an app that helps people turn broad life aspirations into SMART goals across a ${horizon}-month planning horizon. Respond ONLY with raw JSON (no markdown fences, no prose) matching exactly this shape:\n{"title": string (short goal title, max 8 words), "specific": string (1 sentence), "measurable": string (1 sentence, the metric), "timeline": string (e.g. "${horizon} months"), "milestones": [{"title": string, "weekDue": number}] (3-5 milestones, weekDue = week number within the ${horizon}-month horizon, increasing), "habits": [string] (2-3 small recurring habits that support this goal), "firstSprintFocus": string (1 sentence - what to focus on in the first 2-week sprint), "encouragement": string (1 warm, short sentence in Zoe's voice)}`;
   const user = `Life category: ${categoryLabel}\nUser's aspiration in their own words: "${aspiration}"\nPlanning horizon: ${horizon} months\n\nConvert this into a SMART goal.`;
   try {
