@@ -30,6 +30,7 @@ export function GoalBuilderScreen({ categoryId, horizon, onDone, onBack, mode, s
 
   const handleGenerate = async () => {
     if (!aspiration.trim()) return;
+    setStage("loading-questions");
     setQuotaMessage(null);
     try {
       const questionsResult = await zoeGenerateClarifyingQuestions(
@@ -145,9 +146,21 @@ export function GoalBuilderScreen({ categoryId, horizon, onDone, onBack, mode, s
             <div style={{ fontFamily: T.font, fontSize: 12, color: "#b0463a", backgroundColor: "#fbeceb", borderRadius: T.rSm, padding: "8px 12px" }}>{quotaMessage}</div>
           )}
 
-          {stage === "loading" ? (
-            <div style={{ padding: "12px 0" }}><LoadingDots text="Zoe is shaping your SMART goal" /></div>
-          ) : (
+          {stage === "loading-questions" && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "24px 0" }}>
+              <ZoeAvatar size={48} mood="thinking" />
+              <LoadingDots text="Zoe is thinking up some questions for you" />
+            </div>
+          )}
+
+          {stage === "loading" && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "24px 0" }}>
+              <ZoeAvatar size={48} mood="thinking" />
+              <LoadingDots text="Zoe is shaping your SMART goal" />
+            </div>
+          )}
+
+          {stage === "input" && (
             <Btn full icon={Send} disabled={!aspiration.trim()} onClick={handleGenerate}>Ask Zoe</Btn>
           )}
           </>
