@@ -248,17 +248,39 @@ export function useAppState() {
     setState((s) => ({ ...s, goals: s.goals.map((g) => (g.id !== goalId ? g : { ...g, logs: [...(g.logs || []), entry] })) }));
   };
 
-  const startNewSprint = (lengthDays) => {
-    trackEvent("sprint_started", { length_days: lengthDays });
-    setState((s) => ({
-      ...s,
-      sprint: {
-        lengthDays,
-        startedAt: todayStr(),
-        focus: s.goals[0]?.firstSprintFocus || "Take one concrete step today.",
-        milestoneIds: s.goals.flatMap((g) => (g.milestones || []).filter((m) => !m.done).slice(0, 2).map((m) => m.id)),
-      },
-    }));
+  const startNewSprint = (lengthDays, selectedMilestoneIds) => {
+    trackEvent("sprint_started", { length_days: lengthDays, milestone_count: selectedMilestoneIds.length });
+    setState((s) => {
+      // Find which goals the selected milestones belong to
+      const milestonesWithGoalInfo = s.goals
+        .flatMap((g) => (g.milestones || []).filter((m) => selectedMilestoneIds.includes(m.id)).map((m) => ({ ...m, goalTitle: g.title, goalId: g.id })));
+      
+      // Determine focus string based on milestone origin
+      let focus;
+      if (milestonesWithGoalInfo.length === 0) {
+        focus = "Take one concrete step today.";
+      } else {
+        const uniqueGoalIds = [...new Set(milestonesWithGoalInfo.map((m) => m.goalId))];
+        if (uniqueGoalIds.length === 1) {
+          // All milestones from one goal — use that goal's focus
+          const singleGoal = s.goals.find((g) => g.id === uniqueGoalIds[0]);
+          focus = singleGoal?.firstSprintFocus || singleGoal?.title || "Stay focused on your milestones.";
+        } else {
+          // Milestones span multiple goals — use generic summary
+          focus = `${selectedMilestoneIds.length} milestone${selectedMilestoneIds.length === 1 ? "" : "s"} across ${uniqueGoalIds.length} goal${uniqueGoalIds.length === 1 ? "" : "s"}`;
+        }
+      }
+      
+      return {
+        ...s,
+        sprint: {
+          lengthDays,
+          startedAt: todayStr(),
+          focus,
+          milestoneIds: selectedMilestoneIds,
+        },
+      };
+    });
   };
 
   const completeSprint = () => {

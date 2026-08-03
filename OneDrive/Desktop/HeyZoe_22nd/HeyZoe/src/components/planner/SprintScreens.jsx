@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Calendar, CheckCircle2, Circle, RefreshCw, Target, Zap, ChevronRight } from "lucide-react";
+import { Calendar, CheckCircle2, Circle, RefreshCw, Target, Zap, ChevronRight, X } from "lucide-react";
 import { T } from "../../theme";
 import { Btn, Card, ScreenHeader } from "../common/Primitives";
 import { CategoryIcon, LoadingDots, ZoeAvatar } from "../common/Visuals";
@@ -15,18 +15,148 @@ function isSprintExpired(sprint) {
   return daysSinceStart >= sprint.lengthDays;
 }
 
+// Component for user to select milestones before starting a sprint
+function MilestonePickerStep({ goals, lengthDays, onStart, onCancel }) {
+  const MAX_MILESTONES = 5;
+  
+  // Gather all open milestones with goal context
+  const allOpenMilestones = goals
+    .flatMap((g) =>
+      (g.milestones || [])
+        .filter((m) => !m.done)
+        .map((m) => ({ ...m, goalTitle: g.title, categoryId: g.categoryId, goalId: g.id }))
+    );
+  
+  const [selected, setSelected] = useState(new Set());
+  
+  const toggleMilestone = (milestoneId) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(milestoneId)) {
+      newSelected.delete(milestoneId);
+    } else {
+      if (newSelected.size < MAX_MILESTONES) {
+        newSelected.add(milestoneId);
+      }
+    }
+    setSelected(newSelected);
+  };
+  
+  const groupedByGoal = {};
+  allOpenMilestones.forEach((m) => {
+    if (!groupedByGoal[m.goalId]) {
+      groupedByGoal[m.goalId] = { goalTitle: m.goalTitle, categoryId: m.categoryId, milestones: [] };
+    }
+    groupedByGoal[m.goalId].milestones.push(m);
+  });
+  
+  const canStart = selected.size > 0;
+  
+  return (
+    <div style={{ padding: "20px 20px 100px", height: "100%", overflowY: "auto" }}>
+      <ScreenHeader title="Pick your focus" subtitle={`Select 1–${MAX_MILESTONES} milestones for your ${lengthDays}-day sprint`} onBack={onCancel} />
+      
+      {allOpenMilestones.length === 0 ? (
+        <div style={{ marginTop: 20, textAlign: "center" }}>
+          <div style={{ fontFamily: T.font, fontSize: 14, color: T.muted }}>No open milestones. Create one first.</div>
+        </div>
+      ) : (
+        <>
+          <div style={{ marginTop: 12 }}>
+            {Object.entries(groupedByGoal).map(([goalId, { goalTitle, categoryId, milestones }]) => (
+              <div key={goalId} style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: T.font, fontSize: 12, fontWeight: 700, color: T.mutedSoft, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 8 }}>
+                  {goalTitle}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {milestones.map((m) => (
+                    <Card
+                      key={m.id}
+                      padding={14}
+                      onClick={() => toggleMilestone(m.id)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        cursor: "pointer",
+                        backgroundColor: selected.has(m.id) ? T.surfaceHover : "transparent",
+                        border: selected.has(m.id) ? `2px solid ${T.primary}` : `1px solid ${T.hairline}`,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.has(m.id)}
+                        onChange={() => {}}
+                        style={{ width: 18, height: 18, cursor: "pointer", accentColor: T.primary }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: T.font, fontSize: 14, color: T.ink, fontWeight: selected.has(m.id) ? 600 : 400 }}>
+                          {m.title}
+                        </div>
+                        <div style={{ fontFamily: T.font, fontSize: 11, color: T.muted, marginTop: 2 }}>
+                          Week {m.weekDue}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
+            <Btn
+              full
+              disabled={!canStart}
+              onClick={() => onStart(Array.from(selected))}
+            >
+              Start {lengthDays}-day sprint ({selected.size} milestone{selected.size === 1 ? "" : "s"})
+            </Btn>
+          </div>
+          
+          {selected.size === MAX_MILESTONES && (
+            <div style={{ marginTop: 12, fontFamily: T.font, fontSize: 12, color: T.mutedSoft, fontStyle: "italic", textAlign: "center" }}>
+              Maximum {MAX_MILESTONES} milestones per sprint
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SprintScreen({ state, checkInToday, toggleMilestone, startSprintReview, startNewSprint, checkedInToday }) {
   const { sprint, goals } = state;
+  const [showMilestonePicker, setShowMilestonePicker] = useState(false);
+  const [pendingSprintLength, setPendingSprintLength] = useState(null);
 
   if (!sprint) {
+    if (showMilestonePicker && pendingSprintLength) {
+      return (
+        <MilestonePickerStep
+          goals={goals}
+          lengthDays={pendingSprintLength}
+          onStart={(milestoneIds) => {
+            startNewSprint(pendingSprintLength, milestoneIds);
+            setShowMilestonePicker(false);
+            setPendingSprintLength(null);
+          }}
+          onCancel={() => {
+            setShowMilestonePicker(false);
+            setPendingSprintLength(null);
+          }}
+        />
+      );
+    }
+    
     return (
       <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column" }}>
         <ScreenHeader title="Life Sprints" subtitle="Break your goals into focused 2-4 week sprints." />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, textAlign: "center", padding: "0 12px" }}>
           <Target size={36} color={T.mutedSoft} />
           <div style={{ fontFamily: T.font, fontSize: 15, color: T.body }}>No active sprint. Start one to focus on your nearest milestones.</div>
-          <Btn onClick={() => startNewSprint(14)}>Start a 2-week sprint</Btn>
-          <Btn variant="secondary" onClick={() => startNewSprint(28)}>Start a 4-week sprint</Btn>
+          <Btn onClick={() => { setPendingSprintLength(14); setShowMilestonePicker(true); }}>Start a 2-week sprint</Btn>
+          <Btn variant="secondary" onClick={() => { setPendingSprintLength(28); setShowMilestonePicker(true); }}>Start a 4-week sprint</Btn>
         </div>
       </div>
     );
