@@ -90,7 +90,7 @@ export function GoalBuilderScreen({ categoryId, horizon, onDone, onBack, mode, s
   };
 
   return (
-    <div style={{ padding: "0 20px", height: "100%", display: "flex", flexDirection: "column" }}>
+    <div style={{ padding: "0 20px", height: "100%", display: "flex", flexDirection: "column", overflowY: "auto" }}>
     <ScreenHeader
       title={`${cat.label} goal`}
       subtitle={
