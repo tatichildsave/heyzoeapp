@@ -7,6 +7,16 @@ import { trackEvent } from "../services/analytics";
 
 const DEFAULT_HABITS = ["Spend 20 min/day on this goal", "Weekly progress log every Sunday"];
 
+// Calculate current day of the sprint based on startedAt date
+// Uses same date handling as todayStr() for consistency (ISO string YYYY-MM-DD)
+export function getDayOfSprint(sprint) {
+  if (!sprint || !sprint.startedAt) return 1;
+  const today = new Date(todayStr());
+  const started = new Date(sprint.startedAt);
+  const daysSinceStart = Math.floor((today - started) / 86400000); // milliseconds per day
+  return Math.max(1, Math.min(sprint.lengthDays, daysSinceStart + 1));
+}
+
 // Goals saved before habit-tracking existed have `habits` as plain strings
 // (or missing entirely) — this turns them into checkable objects so the
 // goal detail screen works retroactively without forcing a goal rebuild.
@@ -244,7 +254,6 @@ export function useAppState() {
       ...s,
       sprint: {
         lengthDays,
-        dayOfSprint: 1,
         startedAt: todayStr(),
         focus: s.goals[0]?.firstSprintFocus || "Take one concrete step today.",
         milestoneIds: s.goals.flatMap((g) => (g.milestones || []).filter((m) => !m.done).slice(0, 2).map((m) => m.id)),

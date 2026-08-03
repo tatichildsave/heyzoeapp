@@ -4,6 +4,16 @@ import { T } from "../../theme";
 import { Btn, Card, ScreenHeader } from "../common/Primitives";
 import { CategoryIcon, LoadingDots, ZoeAvatar } from "../common/Visuals";
 import { zoeSprintReview, QuotaError } from "../../services/ai";
+import { getDayOfSprint } from "../../hooks/useAppState";
+
+// Detect if sprint's time window has expired (today > startedAt + lengthDays)
+function isSprintExpired(sprint) {
+  if (!sprint || !sprint.startedAt) return false;
+  const today = new Date(new Date().toISOString().slice(0, 10));
+  const started = new Date(sprint.startedAt);
+  const daysSinceStart = Math.floor((today - started) / 86400000);
+  return daysSinceStart >= sprint.lengthDays;
+}
 
 export function SprintScreen({ state, checkInToday, toggleMilestone, startSprintReview, startNewSprint, checkedInToday }) {
   const { sprint, goals } = state;
@@ -24,19 +34,26 @@ export function SprintScreen({ state, checkInToday, toggleMilestone, startSprint
 
   const allMilestones = goals.flatMap((g) => g.milestones.map((m) => ({ ...m, goalTitle: g.title, categoryId: g.categoryId, goalId: g.id }))).filter((m) => sprint.milestoneIds.includes(m.id));
   const allHabits = goals.flatMap((g) => g.habits.map((h, i) => ({ text: h, goalId: g.id, idx: i })));
-  const dayPct = Math.min(100, Math.round((sprint.dayOfSprint / sprint.lengthDays) * 100));
+  const dayOfSprint = getDayOfSprint(sprint);
+  const expired = isSprintExpired(sprint);
+  const dayPct = Math.round((dayOfSprint / sprint.lengthDays) * 100);
 
   return (
     <div style={{ padding: "20px 20px 100px", overflowY: "auto", height: "100%" }}>
       <ScreenHeader title="Current sprint" subtitle={sprint.focus} />
       <Card padding={16} style={{ marginTop: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontFamily: T.font, fontSize: 13, color: T.muted, marginBottom: 8 }}>
-          <span>Day {sprint.dayOfSprint} of {sprint.lengthDays}</span>
-          <span>{sprint.lengthDays - sprint.dayOfSprint} days left</span>
+          <span>Day {dayOfSprint} of {sprint.lengthDays}</span>
+          <span>{expired ? "Sprint window closed" : `${sprint.lengthDays - dayOfSprint} days left`}</span>
         </div>
         <div style={{ height: 8, backgroundColor: T.hairlineSoft, borderRadius: T.rFull, overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${dayPct}%`, backgroundColor: T.primary, borderRadius: T.rFull }} />
         </div>
+        {expired && (
+          <div style={{ marginTop: 12, fontFamily: T.font, fontSize: 12, color: T.muted, fontStyle: "italic" }}>
+            Sprint timeline has passed. End & review whenever you're ready.
+          </div>
+        )}
       </Card>
 
       <div style={{ marginTop: 20 }}>
