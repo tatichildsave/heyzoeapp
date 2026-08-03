@@ -232,8 +232,8 @@ export default function App() {
         <SprintReviewScreen
           goals={state.goals}
           onBack={() => setSecondaryView(null)}
-          onComplete={() => {
-            completeSprint();
+          onComplete={(result) => {
+            completeSprint(result);
             setSecondaryView(null);
           }}
         />

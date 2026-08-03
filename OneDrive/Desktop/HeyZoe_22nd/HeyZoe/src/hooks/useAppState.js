@@ -283,9 +283,34 @@ export function useAppState() {
     });
   };
 
-  const completeSprint = () => {
+  const completeSprint = (reviewResult) => {
     let next = { ...state, sprint: null, sprintsCompleted: state.sprintsCompleted + 1, xp: state.xp + 25 };
     next = awardBadge(next, "sprint-1");
+    
+    // If sprint review was completed, persist it to the goal logs
+    if (reviewResult && state.sprint) {
+      // Find first goal that had milestones in this sprint
+      const firstGoalWithMilestone = state.goals.find((g) =>
+        (g.milestones || []).some((m) => state.sprint.milestoneIds.includes(m.id))
+      );
+      
+      if (firstGoalWithMilestone) {
+        // Format review as a timestamped log entry
+        const reviewText = `[Sprint Review] ${reviewResult.summary}\n\nInsight: ${reviewResult.insight}\n\nSuggested adjustments:\n${reviewResult.suggestedAdjustments.map((a) => `• ${a}`).join("\n")}`;
+        const entry = {
+          id: `sprint-review-${Date.now()}`,
+          text: reviewText,
+          at: new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        };
+        next = {
+          ...next,
+          goals: next.goals.map((g) =>
+            g.id !== firstGoalWithMilestone.id ? g : { ...g, logs: [...(g.logs || []), entry] }
+          ),
+        };
+      }
+    }
+    
     trackEvent("sprint_completed");
     commit(next);
   };
