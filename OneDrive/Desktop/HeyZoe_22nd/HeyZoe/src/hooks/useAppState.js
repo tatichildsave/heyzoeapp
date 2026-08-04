@@ -56,6 +56,7 @@ const DEFAULT_STATE = {
   sprintsCompleted: 0,
   report: null,
   inAppReminder: { milestoneId: null, shownOn: null },
+  saveProgressBanner: { dismissedAt: null },
 };
 
 /**
@@ -331,6 +332,16 @@ export function useAppState() {
     setState((s) => ({ ...s, inAppReminder: { milestoneId, shownOn: new Date().toISOString().slice(0, 10) } }));
   };
 
+  // Records that the save-progress banner was dismissed — sets a cooldown
+  // timestamp so it won't show again for 7 days, allowing users to sign up
+  // when they're ready without being nagged on every session.
+  const dismissSaveProgressBanner = () => {
+    setState((s) => ({
+      ...s,
+      saveProgressBanner: { dismissedAt: new Date().toISOString() }
+    }));
+  };
+
   const resetApp = () => {
     window.storage.delete(STORAGE_KEY).catch(() => {});
     setState(DEFAULT_STATE);
@@ -353,6 +364,7 @@ export function useAppState() {
     addXp,
     setReport,
     markReminderShown,
+    dismissSaveProgressBanner,
     resetApp,
     celebration,
     clearCelebration,

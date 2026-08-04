@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppState, useCouple, useExperts, usePushReminders } from "./hooks";
+import { useAuth } from "./hooks/useAuth";
 import { useViewport } from "./components/common/Visuals";
 import { AppFrame, BottomNav, Sidebar } from "./components/common/LayoutNav";
 import { Celebration } from "./components/common/Celebration";
 import { ReminderBanner } from "./components/common/ReminderBanner";
+import { SaveProgressBanner } from "./components/common/SaveProgressBanner";
+import { AuthModal } from "./components/ai/AuthModal";
+import { EmailAuthProvider, linkWithCredential } from "firebase/auth";
 import { SimpleOnboarding, GoalBuilderScreen } from "./components/onboarding";
-import { Home } from "./components/dashboard";
+import { auth, isFirebaseConfigured } from "./services/firebase";
 import { GoalsScreen, GoalDetailScreen } from "./components/goals";
 import { ProfileScreen } from "./components/settings";
 import { CoupleSetupScreen, UsScreen } from "./components/couple";
@@ -47,6 +51,7 @@ export default function App() {
     addXp,
     setReport,
     markReminderShown,
+    dismissSaveProgressBanner,
     resetApp,
     celebration,
     clearCelebration,
@@ -62,6 +67,7 @@ export default function App() {
   const couple = useCouple(state.goals);
   const experts = useExperts();
   const reminders = usePushReminders(couple.uid);
+  const { user } = useAuth();
 
   useEffect(() => {
     if (couple.uid) setAnalyticsUser(couple.uid);
@@ -76,13 +82,47 @@ export default function App() {
   const [expertCategoryFilter, setExpertCategoryFilter] = useState(null);
   const [selectedExpert, setSelectedExpert] = useState(null);
   const [viewingGoalId, setViewingGoalId] = useState(null);
+  const [authModal, setAuthModal] = useState({ show: false, mode: "signup", email: "", password: "", showPassword: false, error: "" });
+
+  const closeAuthModal = () => setAuthModal((s) => ({ ...s, show: false, error: "" }));
+
+  const handleSaveProgressSignup = async () => {
+    try {
+      if (!isFirebaseConfigured) throw new Error("Firebase not configured");
+      const cred = EmailAuthProvider.credential(authModal.email, authModal.password);
+      await linkWithCredential(auth.currentUser, cred);
+      trackEvent("account_upgraded_from_banner");
+      closeAuthModal();
+    } catch (e) {
+      setAuthModal((s) => ({ ...s, error: e.message?.replace(/^Firebase: /, "") || "Couldn't create your account." }));
+    }
+  };
 
   // findMostUrgentMilestone stays the one place priority is decided (see
   // utils/milestones.js); shouldShowReminder only decides whether to
   // surface that same result again right now (day+milestone-aware, not a
   // fixed time gap).
   const urgentMilestone = useMemo(() => findMostUrgentMilestone(state.goals), [state.goals]);
-  const showReminderBanner = state.onboardingDone && !addingGoalFor && !secondaryView && !viewingGoalId && shouldShowReminder(urgentMilestone, state.inAppReminder);
+  
+  const hasRealAccount = !!user && !user.isAnonymous;
+  
+  // Check if save-progress banner was dismissed less than 7 days ago
+  const isSaveProgressBannerDismissedRecently = () => {
+    if (!state.saveProgressBanner?.dismissedAt) return false;
+    const dismissedTime = new Date(state.saveProgressBanner.dismissedAt);
+    const now = new Date();
+    const daysSinceDismissal = (now - dismissedTime) / (1000 * 60 * 60 * 24);
+    return daysSinceDismissal < 7;
+  };
+  
+  // Show save-progress banner after first goal, only for anonymous users, 
+  // and if not dismissed within last 7 days. Don't show it if reminder banner is showing.
+  const showSaveProgressBanner = state.onboardingDone && state.goals.length >= 1 && !hasRealAccount && 
+    !addingGoalFor && !secondaryView && !viewingGoalId && !isSaveProgressBannerDismissedRecently();
+  
+  // Don't show both banners at once - reminder takes priority for milestone-related urgency
+  const showReminderBanner = state.onboardingDone && !addingGoalFor && !secondaryView && !viewingGoalId && 
+    shouldShowReminder(urgentMilestone, state.inAppReminder) && !showSaveProgressBanner;
 
   const currentView = !loaded
     ? null // nothing to log yet — still loading local state
@@ -323,7 +363,36 @@ export default function App() {
               onDismiss={() => markReminderShown(urgentMilestone.id)}
             />
           )}
+          {showSaveProgressBanner && (
+            <SaveProgressBanner
+              hasRealAccount={hasRealAccount}
+              onSignup={() => setAuthModal((s) => ({ ...s, show: true }))}
+              onDismiss={dismissSaveProgressBanner}
+            />
+          )}
           <Celebration celebration={celebration} onDone={clearCelebration} />
+          <AuthModal
+            show={authModal.show}
+            mode={authModal.mode}
+            onClose={closeAuthModal}
+            onSignup={handleSaveProgressSignup}
+            onLogin={() => {}} // Not used for save-progress flow
+            onGuest={() => {}}
+            onLinkPartner={() => {}}
+            email={authModal.email}
+            setEmail={(email) => setAuthModal((s) => ({ ...s, email }))}
+            password={authModal.password}
+            setPassword={(password) => setAuthModal((s) => ({ ...s, password }))}
+            showPassword={authModal.showPassword}
+            setShowPassword={(showPassword) => setAuthModal((s) => ({ ...s, showPassword }))}
+            error={authModal.error}
+            partnerCode=""
+            setPartnerCode={() => {}}
+            shareCode=""
+            onGenerateCode={() => {}}
+            onSwitchToSignup={() => setAuthModal((s) => ({ ...s, mode: "signup" }))}
+            onSwitchToLogin={() => setAuthModal((s) => ({ ...s, mode: "login" }))}
+          />
         </div>
       </div>
     </AppFrame>
